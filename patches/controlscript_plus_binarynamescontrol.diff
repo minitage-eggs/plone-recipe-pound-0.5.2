@@ -1,6 +1,6 @@
 Index: CHANGES.txt
 ===================================================================
---- CHANGES.txt	(révision 69697)
+--- CHANGES.txt	(révision 69707)
 +++ CHANGES.txt	(copie de travail)
 @@ -1,8 +1,16 @@
 -trunk (2008-07-08)
@@ -9,8 +9,8 @@ Index: CHANGES.txt
  
    - poundctl restart need to use the right config file as well [jensens]
 +  - In term of portability, bash scripts now use env to get their shell.
-+  - The poundctl script overrides the control binary.
-+    So are introduced options to fix that problem:
++  - The poundctl script overrides the control binary present in $prefix/sbin.
++    So are introduced options to fix that problem: (kiorky)
  
 +        - A `poundcontrol` script is added to wrap the real poundctl binary.
 +        - Customize the names of generated scripts.
@@ -22,7 +22,7 @@ Index: CHANGES.txt
  
 Index: setup.py
 ===================================================================
---- setup.py	(révision 69697)
+--- setup.py	(révision 69707)
 +++ setup.py	(copie de travail)
 @@ -21,7 +21,7 @@
  import os
@@ -35,7 +35,7 @@ Index: setup.py
                'plone',
 Index: plone/recipe/pound/tests/test_pounddocs.py
 ===================================================================
---- plone/recipe/pound/tests/test_pounddocs.py	(révision 69697)
+--- plone/recipe/pound/tests/test_pounddocs.py	(révision 69707)
 +++ plone/recipe/pound/tests/test_pounddocs.py	(copie de travail)
 @@ -51,7 +51,7 @@
  def test_suite():
@@ -60,7 +60,7 @@ Index: plone/recipe/pound/poundcontrol.tpl
 +
 Index: plone/recipe/pound/poundctl.tpl
 ===================================================================
---- plone/recipe/pound/poundctl.tpl	(révision 69697)
+--- plone/recipe/pound/poundctl.tpl	(révision 69707)
 +++ plone/recipe/pound/poundctl.tpl	(copie de travail)
 @@ -1,4 +1,4 @@
 -#!/bin/bash
@@ -70,7 +70,7 @@ Index: plone/recipe/pound/poundctl.tpl
  POUND_CFG="$poundcfg"
 Index: plone/recipe/pound/docs/configuring.txt
 ===================================================================
---- plone/recipe/pound/docs/configuring.txt	(révision 69697)
+--- plone/recipe/pound/docs/configuring.txt	(révision 69707)
 +++ plone/recipe/pound/docs/configuring.txt	(copie de travail)
 @@ -38,6 +38,9 @@
  
@@ -84,9 +84,9 @@ Index: plone/recipe/pound/docs/configuring.txt
  =============
 Index: plone/recipe/pound/docs/technical.txt
 ===================================================================
---- plone/recipe/pound/docs/technical.txt	(révision 69697)
+--- plone/recipe/pound/docs/technical.txt	(révision 69707)
 +++ plone/recipe/pound/docs/technical.txt	(copie de travail)
-@@ -57,20 +57,22 @@
+@@ -57,7 +57,7 @@
  Checking the files created::
  
      >>> paths
@@ -95,13 +95,7 @@ Index: plone/recipe/pound/docs/technical.txt
  
      >>> location = paths[0]
  
- Checking the pound.cfg created::
- 
-     >>> cfg = join(location, 'pound.cfg')
-+    >>> import getpass
-+    >>> user = getpass.getuser()
-     >>> print open(cfg).read()
-     # pound.cfg
+@@ -69,8 +69,8 @@
      # created by plone.recipe.pound
      <BLANKLINE>
      # global options:
@@ -112,7 +106,7 @@ Index: plone/recipe/pound/docs/technical.txt
      <BLANKLINE>
      Daemon 1
      <BLANKLINE>
-@@ -169,7 +171,7 @@
+@@ -169,7 +169,7 @@
  We also have a general script that is added in the buildout binary folder::
  
      >>> print open(join(bin_dir, 'poundctl')).read()
@@ -123,7 +117,7 @@ Index: plone/recipe/pound/docs/technical.txt
  
 Index: plone/recipe/pound/poundrun.tpl
 ===================================================================
---- plone/recipe/pound/poundrun.tpl	(révision 69697)
+--- plone/recipe/pound/poundrun.tpl	(révision 69707)
 +++ plone/recipe/pound/poundrun.tpl	(copie de travail)
 @@ -1,4 +1,4 @@
 -#!/bin/bash
@@ -133,7 +127,7 @@ Index: plone/recipe/pound/poundrun.tpl
  POUND_CFG="$poundcfg"
 Index: plone/recipe/pound/config.py
 ===================================================================
---- plone/recipe/pound/config.py	(révision 69697)
+--- plone/recipe/pound/config.py	(révision 69707)
 +++ plone/recipe/pound/config.py	(copie de travail)
 @@ -50,6 +50,14 @@
  
