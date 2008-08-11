@@ -1,0 +1,191 @@
+Index: CHANGES.txt
+===================================================================
+--- CHANGES.txt	(révision 69697)
++++ CHANGES.txt	(copie de travail)
+@@ -1,8 +1,16 @@
+-trunk (2008-07-08)
++trunk (2008-08-08)
+ ==================
+ 
+   - poundctl restart need to use the right config file as well [jensens]
++  - In term of portability, bash scripts now use env to get their shell.
++  - The poundctl script overrides the control binary.
++    So are introduced options to fix that problem:
+ 
++        - A `poundcontrol` script is added to wrap the real poundctl binary.
++        - Customize the names of generated scripts.
++          To use them, simply add  `poundctl-binary`, `poundrun-binary`,
++          `poundcontrol-binary` to your options.
++
+ 0.5.1 (2008-07-08)
+ ==================
+ 
+Index: setup.py
+===================================================================
+--- setup.py	(révision 69697)
++++ setup.py	(copie de travail)
+@@ -21,7 +21,7 @@
+ import os
+ from setuptools import setup, find_packages
+ 
+-version = '0.5.1'
++version = '0.5.2'
+ 
+ README = os.path.join(os.path.dirname(__file__),
+               'plone',
+Index: plone/recipe/pound/tests/test_pounddocs.py
+===================================================================
+--- plone/recipe/pound/tests/test_pounddocs.py	(révision 69697)
++++ plone/recipe/pound/tests/test_pounddocs.py	(copie de travail)
+@@ -51,7 +51,7 @@
+ def test_suite():
+ 
+     globs = globals()
+-    globs['test_dir'] = current_dir
++    globs['test_dir'] = os.path.abspath(current_dir)
+     globs['bin_dir'] = '%s/bin' % current_dir
+ 
+     suite = unittest.TestSuite((
+Index: plone/recipe/pound/poundcontrol.tpl
+===================================================================
+--- plone/recipe/pound/poundcontrol.tpl	(révision 0)
++++ plone/recipe/pound/poundcontrol.tpl	(révision 0)
+@@ -0,0 +1,7 @@
++#!/usr/bin/env bash
++BUILDOUT_PATH=""
++POUND_RUNNER="$poundcontrol"
++POUND_SOCK="$socket"
++
++\$POUND_RUNNER -c \$POUND_SOCK $@
++
+Index: plone/recipe/pound/poundctl.tpl
+===================================================================
+--- plone/recipe/pound/poundctl.tpl	(révision 69697)
++++ plone/recipe/pound/poundctl.tpl	(copie de travail)
+@@ -1,4 +1,4 @@
+-#!/bin/bash
++#!/usr/bin/env bash
+ BUILDOUT_PATH=""
+ POUND_RUNNER="$poundbin"
+ POUND_CFG="$poundcfg"
+Index: plone/recipe/pound/docs/configuring.txt
+===================================================================
+--- plone/recipe/pound/docs/configuring.txt	(révision 69697)
++++ plone/recipe/pound/docs/configuring.txt	(copie de travail)
+@@ -38,6 +38,9 @@
+ 
+ socket - Set the control socket path.
+ 
++poundctl-binary - Set the init script name
++poundrun-binary - Set the daemon binary name
++poundcontrol-binary - Set the pound controller name  (it wraps the pound's poundctl binary)
+ 
+ Example usage
+ =============
+Index: plone/recipe/pound/docs/technical.txt
+===================================================================
+--- plone/recipe/pound/docs/technical.txt	(révision 69697)
++++ plone/recipe/pound/docs/technical.txt	(copie de travail)
+@@ -57,20 +57,22 @@
+ Checking the files created::
+ 
+     >>> paths
+-    ['...parts/pound/etc', '.../bin/poundctl', '.../bin/poundrun']
++    ['...parts/pound/etc', '.../bin/poundctl', '.../bin/poundrun', '.../bin/poundcontrol']
+ 
+     >>> location = paths[0]
+ 
+ Checking the pound.cfg created::
+ 
+     >>> cfg = join(location, 'pound.cfg')
++    >>> import getpass
++    >>> user = getpass.getuser()
+     >>> print open(cfg).read()
+     # pound.cfg
+     # created by plone.recipe.pound
+     <BLANKLINE>
+     # global options:
+-    User        "youenn"
+-    Group       "youenn"
++    User        "..."
++    Group       "..."
+     <BLANKLINE>
+     Daemon 1
+     <BLANKLINE>
+@@ -169,7 +171,7 @@
+ We also have a general script that is added in the buildout binary folder::
+ 
+     >>> print open(join(bin_dir, 'poundctl')).read()
+-    #!/bin/bash
++    #!/usr/bin/env bash
+     BUILDOUT_PATH=""
+     ...
+ 
+Index: plone/recipe/pound/poundrun.tpl
+===================================================================
+--- plone/recipe/pound/poundrun.tpl	(révision 69697)
++++ plone/recipe/pound/poundrun.tpl	(copie de travail)
+@@ -1,4 +1,4 @@
+-#!/bin/bash
++#!/usr/bin/env bash
+ BUILDOUT_PATH=""
+ POUND_RUNNER="$poundbin"
+ POUND_CFG="$poundcfg"
+Index: plone/recipe/pound/config.py
+===================================================================
+--- plone/recipe/pound/config.py	(révision 69697)
++++ plone/recipe/pound/config.py	(copie de travail)
+@@ -50,6 +50,14 @@
+ 
+         self.options = options
+         self.buildoptions = get_options_from_build(buildout, options)
++        self.options['socket'] = self.buildoptions.get(
++            'socket',
++            os.path.join(
++                self.buildout['buildout']['directory'],
++                'var',
++                'pound.sock'
++            )
++        ) 
+ 
+     def install(self):
+         """ install config fo pound """
+@@ -92,16 +100,8 @@
+ 
+         tpl.owner = self.buildoptions.get('owner', utils.get_sysuser())
+         tpl.group = self.buildoptions.get('group', tpl.owner)
++        tpl.socket = self.options.get('socket', '')
+ 
+-        tpl.socket = self.buildoptions.get(
+-                         'socket',
+-                         os.path.join(
+-                              self.buildout['buildout']['directory'],
+-                             'var',
+-                             'pound.sock'
+-                         )
+-                     )
+-
+         # creating balancers
+         balancer_cfg = []
+ 
+@@ -177,13 +177,18 @@
+ 
+         pid = os.path.join(var_dir, 'pound.pid')
+         scripts = []
+-        for x in ('poundctl', 'poundrun'):
++        for x in ('poundctl', 'poundrun', 'poundcontrol'):
+             ctl = Template(open(os.path.join(curdir, x+'.tpl')).read())
+             ctl.poundbin = self.options['executable']
++            ctl.socket = self.options.get('socket', '')
++            ctl.poundcontrol = os.path.join(
++                os.path.dirname(self.options['executable']),
++                'poundctl'
++            )
+             ctl.poundcfg = filename
+             ctl.poundpid = pid
+             bin_dir = self.buildout['buildout']['bin-directory']
+-            script_name = os.path.join(bin_dir, x)
++            script_name = os.path.join(bin_dir, self.options.get('%s-binary' % x, x))
+             f = open(script_name, 'w')
+             try:
+                 print >>f, ctl
